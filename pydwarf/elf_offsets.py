@@ -82,7 +82,7 @@ def get_items_from_DWARF(dwarf, tags=None, names=None):
     return found
 
 
-def get_offsets_from_DIE(die, offset2die, start=0):
+def get_offsets_from_DIE(die, offset2die, level=0, start=0):
     assert die.tag in {'DW_TAG_structure_type', 'DW_TAG_union_type', 'DW_TAG_typedef'}, 'Unhandled main type: ' + die.tag
     # Union members all start at the same offset (at least I sure fucking hope so)
     offset = start
@@ -134,11 +134,14 @@ def get_offsets_from_DIE(die, offset2die, start=0):
                             value_type = ''
                 else:
                     value_type = 'struct'
-            yield value_type, value_name, offset
+
+            yield f'{"    " * level}{value_type}', value_name, offset
+            if value_type == 'struct' and value_die.has_children:
+                yield from get_offsets_from_DIE(value_die, offset, level=level+1)
         else:
             # Anonymous union or struct
             p = child.get_DIE_from_attribute('DW_AT_type')
-            yield from get_offsets_from_DIE(p, offset2die)
+            yield from get_offsets_from_DIE(p, offset2die, level=level+1)
             # child_type = offset2die[child.attributes['DW_AT_type'].value]
             # yield from get_offsets_from_DIE(child_type, offset2die, offset)
 
@@ -149,7 +152,7 @@ if __name__ == '__main__':
     search_offest_for: list[str] = [
         # "struct LoRa_setting",
         # "union RadioProtocol"
-        "typedef struct TMI9_t"
+        "typedef struct TMI9_pl_t"
     ]
     result: dict = get_all_offsets_from_ELF(filename, search_offest_for)
     for struct_name, data in result.items():
