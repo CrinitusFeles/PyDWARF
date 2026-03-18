@@ -20,7 +20,8 @@ def _validate_struct(struct):
     return kind, name
 
 
-def get_all_offsets_from_ELF(filename: Path | str, structs) -> dict[str, list[tuple]]:
+def get_all_offsets_from_ELF(filename: Path | str, structs,
+                             use_recursive: bool = False) -> dict[str, list[tuple]]:
     # Do argument validation at the beginning, so that if there's a problem, we don't have to wait for the file to parse first
     names = []
     for struct in structs:
@@ -47,7 +48,7 @@ def get_all_offsets_from_ELF(filename: Path | str, structs) -> dict[str, list[tu
                 item = item.get_DIE_from_attribute('DW_AT_type')
             result[struct] = [
                 (field_type, field_name, offset)
-                for field_type, field_name, offset in get_offsets_from_DIE(item, offset2die)
+                for field_type, field_name, offset in get_offsets_from_DIE(item, offset2die, use_recursive)
             ]
         return result
 
@@ -82,7 +83,7 @@ def get_items_from_DWARF(dwarf, tags=None, names=None):
     return found
 
 
-def get_offsets_from_DIE(die, offset2die, level=0, start=0):
+def get_offsets_from_DIE(die, offset2die, use_recursive: bool, level=0, start=0):
     assert die.tag in {'DW_TAG_structure_type', 'DW_TAG_union_type', 'DW_TAG_typedef'}, 'Unhandled main type: ' + die.tag
     # Union members all start at the same offset (at least I sure fucking hope so)
     offset = start
@@ -135,13 +136,20 @@ def get_offsets_from_DIE(die, offset2die, level=0, start=0):
                 else:
                     value_type = 'struct'
 
-            yield f'{"    " * level}{value_type}', value_name, offset
+            yield f'{"    " * level}{value_type}', value_name, f'{"    " * level}+{offset}'
             if value_type == 'struct' and value_die.has_children:
-                yield from get_offsets_from_DIE(value_die, offset, level=level+1)
+                yield from get_offsets_from_DIE(value_die, offset, level=level+1,
+                                                use_recursive=use_recursive)
+            elif value_die.tag == 'DW_TAG_typedef' and use_recursive:
+                p = value_die.get_DIE_from_attribute('DW_AT_type')
+                if p.has_children:
+                    yield from get_offsets_from_DIE(p, offset, level=level+1,
+                                                    use_recursive=use_recursive)
         else:
             # Anonymous union or struct
             p = child.get_DIE_from_attribute('DW_AT_type')
-            yield from get_offsets_from_DIE(p, offset2die, level=level+1)
+            yield from get_offsets_from_DIE(p, offset2die, level=level+1,
+                                            use_recursive=use_recursive)
             # child_type = offset2die[child.attributes['DW_AT_type'].value]
             # yield from get_offsets_from_DIE(child_type, offset2die, offset)
 
@@ -152,12 +160,12 @@ if __name__ == '__main__':
     search_offest_for: list[str] = [
         # "struct LoRa_setting",
         # "union RadioProtocol"
-        "typedef struct TMI9_pl_t"
+        "typedef struct TMI6_t"
     ]
-    result: dict = get_all_offsets_from_ELF(filename, search_offest_for)
+    result: dict = get_all_offsets_from_ELF(filename, search_offest_for, use_recursive=False)
     for struct_name, data in result.items():
         print(struct_name)
         for field in data:
             field_str: str = f'{field[0]} {field[1]}'
-            print(f'| {field_str:<35}| +{field[2]:<6}|')
+            print(f'| {field_str:<35}| {field[2]:<12}|')
         print()
