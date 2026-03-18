@@ -83,10 +83,25 @@ def get_items_from_DWARF(dwarf, tags=None, names=None):
     return found
 
 
-def get_offsets_from_DIE(die, offset2die, use_recursive: bool, level=0, start=0):
+def get_offsets_from_DIE(die, offset2die, use_recursive: bool, level=0):
     assert die.tag in {'DW_TAG_structure_type', 'DW_TAG_union_type', 'DW_TAG_typedef'}, 'Unhandled main type: ' + die.tag
     # Union members all start at the same offset (at least I sure fucking hope so)
-    offset = start
+    offset = 0
+
+    def calc_offset(die_child):
+        loc = die_child.attributes['DW_AT_data_member_location'].value
+        if isinstance(loc, list):
+            l = loc[1:]
+            if len(l) == 2:
+                high = l[1] >> 1
+                low = l[0] & 0x7F if (l[1] & 0x01) == 0 else l[0]
+                offset = int.from_bytes(bytes([high, low]))
+            else:
+                offset = l[0]
+        else:
+            offset = loc
+        return offset
+
     array_size = []
     for child in die.iter_children():
         if child.tag == 'DW_TAG_array_type':
@@ -97,19 +112,10 @@ def get_offsets_from_DIE(die, offset2die, use_recursive: bool, level=0, start=0)
         assert child.tag in 'DW_TAG_member', 'Unhandled child type: ' + child.tag
         if die.tag == 'DW_TAG_structure_type':
             # Struct members have different starting offsets
-            loc = child.attributes['DW_AT_data_member_location'].value
-            if isinstance(loc, list):
-                l = loc[1:]
-                if len(l) == 2:
-                    high = l[1] >> 1
-                    low = l[0] & 0x7F if (l[1] & 0x01) == 0 else l[0]
-                    offset = start + int.from_bytes(bytes([high, low]))
-                else:
-                    offset = start + l[0]
-            else:
-                offset = start + loc
+            offset = calc_offset(child)
         else:
             assert 'DW_AT_data_member_location' not in child.attributes, 'Union members can have starting offsets?!'
+
 
         if 'DW_AT_name' in child.attributes:
             value_name = child.attributes['DW_AT_name'].value.decode('ascii')
@@ -117,6 +123,8 @@ def get_offsets_from_DIE(die, offset2die, use_recursive: bool, level=0, start=0)
                 for size in array_size[::-1]:
                     value_name += f'[{size}]'
                 array_size = []
+            if 'DW_AT_bit_offset' in child.attributes:
+                value_name += f': {child.attributes["DW_AT_bit_size"].value}'
             value_die = child.get_DIE_from_attribute('DW_AT_type')
             if 'DW_AT_name' in value_die.attributes:
                 value_type = value_die.attributes['DW_AT_name'].value.decode('ascii')
@@ -162,7 +170,7 @@ if __name__ == '__main__':
         # "union RadioProtocol"
         "typedef struct TMI6_t"
     ]
-    result: dict = get_all_offsets_from_ELF(filename, search_offest_for, use_recursive=False)
+    result: dict = get_all_offsets_from_ELF(filename, search_offest_for, use_recursive=True)
     for struct_name, data in result.items():
         print(struct_name)
         for field in data:
