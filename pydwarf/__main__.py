@@ -1,3 +1,4 @@
+import argparse
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
@@ -221,21 +222,39 @@ def to_string(result: dict[str, list[Field]],
     return '\n\n'.join(output)
 
 
+table_formats: list[str] = ["plain", "simple", "grid", "pipe", "orgtbl", "rst",
+                            "mediawiki", "github", "latex", "latex_raw",
+                            "latex_booktabs", "latex_longtable", "tsv"]
+
 if __name__ == '__main__':
-    filename: Path = Path.cwd() / 'GrADCS_MCU_FW.axf'
-    # filename: Path = Path(__file__).parent / 'STM32_LoRa_v3.1.out.elf'
-    search_offest_for: list[str] = [
-        # "struct LoRa_setting",
-        # "union RadioProtocol"
-        "typedef struct TMI6_t",
-        "typedef struct TMI7_t",
-    ]
-    result: dict[str, list[Field]] = get_all_offsets_from_ELF(filename,
-                                                              search_offest_for)
+    parser = argparse.ArgumentParser(description='Calculate C struct offset recusively.')
+    parser.add_argument('elf_filepath', type=str,
+                        help='Path to .elf or .axf')
+    parser.add_argument('struct_name', type=str, nargs='+',
+                        help='name of struct, e.g.: typedef struct MyStruct')
+    parser.add_argument('-l', '--labels_indent', type=int, default=4,
+                        help='indent for labels')
+    parser.add_argument('-k', '--offset_indet', type=int, default=0,
+                        help='indent for offsets')
+    parser.add_argument('-d', '--max_depth', type=int, default=99,
+                        help='indent for offsets')
+    parser.add_argument('-o', '--csv_output_filename', type=str, default=None,
+                        help='filename for csv output')
+    parser.add_argument('-f', '--output_format', type=str, default='table',
+                        help='output format: ["table", "struct", "json"]')
+    parser.add_argument('-t', '--table_format', type=str, default='pipe',
+                        help=f'table format: {table_formats}')
+
+
+    args = parser.parse_args()
+
+    result: dict[str, list[Field]] = get_all_offsets_from_ELF(args.elf_filepath,
+                                                              [' '.join(args.struct_name)])
     print(to_string(result,
-                    labels_indent=4,
-                    offset_indet=0,
-                    output_format='table',
-                    table_format='pipe',
-                    csv_output_filename='test.csv',
-                    max_depth=5))
+                    labels_indent=args.labels_indent,
+                    offset_indet=args.offset_indet,
+                    output_format=args.output_format,
+                    table_format=args.table_format,
+                    csv_output_filename=args.csv_output_filename,
+                    max_depth=args.max_depth))
+
