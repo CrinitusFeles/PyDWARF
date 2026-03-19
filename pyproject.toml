@@ -6,4 +6,5 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pyelftools>=0.32",
+    "tabulate>=0.10.0",
 ]
