@@ -20,6 +20,7 @@ class Field:
     level: int
     label: str
     offset: int
+    size: int = 0
     bits: str | None = None
     array: str = ''
 
@@ -152,6 +153,8 @@ def get_offsets_from_DIE(die, offset2die, level=0):
                     if 'DW_AT_name' in child.attributes:
                         types.append(child.attributes['DW_AT_name'].value.decode('ascii'))
                         field.type_val = types[0]
+                    if 'DW_AT_byte_size' in child.attributes:
+                        field.size = child.attributes['DW_AT_byte_size'].value
                     if child.tag == 'DW_TAG_structure_type':
                         if field.type_val == '':
                             field.type_val = 'struct'
@@ -163,6 +166,8 @@ def get_offsets_from_DIE(die, offset2die, level=0):
                     child = child.get_DIE_from_attribute('DW_AT_type')
                 if 'DW_AT_name' in child.attributes:
                     field.type_val = child.attributes['DW_AT_name'].value.decode('ascii')
+                if 'DW_AT_byte_size' in child.attributes:
+                    field.size = child.attributes['DW_AT_byte_size'].value
             if not flag:
                 yield field
         else:
@@ -171,10 +176,24 @@ def get_offsets_from_DIE(die, offset2die, level=0):
             yield from get_offsets_from_DIE(p, offset2die, level=level+1)
 
 
+# def to_frame(struct_name: str, rows: list[Field]):
+#     data = f"""
+#     Frame(name={struct_name}, rows=[
+#     ], 'little')
+#     """
+#     for row_field in rows:
+#         bitfields = ''
+#         if row_field.bits:
+#             bitfields = ', bitfields='
+#         row: str = f'Row({row_field.label}, {row_field.size}, "X"{bitfields})'
+
+#         # f'Row({row_field.label})'
+
+
 def to_string(result: dict[str, list[Field]],
               labels_indent: int,
               offset_indet: int,
-              output_format: Literal['table', 'struct', 'json'],
+              output_format: Literal['table', 'struct', 'json', 'frame'],
               csv_output_filename: str | None = None,
               max_depth: int = 99,
               table_format: Literal['plain', 'simple', 'grid', 'pipe',
@@ -186,10 +205,11 @@ def to_string(result: dict[str, list[Field]],
     def to_columns(field: Field, output_format: Literal['struct', 'table']):
         prefix1 = "⠀" * labels_indent if output_format == 'struct' else ""
         prefix2 = "// " if output_format == 'struct' else ""
+        prefix3 = ';' if output_format == 'struct' else ""
         bits: str = f'{field.bits}' if field.bits else ''
         array = f'{field.array}' if field.array else ''
         first_column: str = f'{prefix1}{" " * labels_indent * field.level} '\
-                            f'{field.type_val} {field.label}{bits}{array}'
+                            f'{field.type_val} {field.label}{bits}{array}{prefix3}'
         second_column: str = f'{prefix2}{" " * offset_indet * field.level}+{field.offset}'
         return first_column, second_column
 
@@ -207,11 +227,13 @@ def to_string(result: dict[str, list[Field]],
                      if field.level < max_depth]
             output.append(tabulate(table, headers=[f'{struct_name} {{', ''],
                            tablefmt='plain', disable_numparse=True,
-                           stralign='left', preserve_whitespace=True) + '}')  # type: ignore
+                           stralign='left', preserve_whitespace=True) + '\n}')  # type: ignore
         elif output_format == 'json':
             obj: dict = {key: [asdict(v) for v in val]
                          for key, val in result.items()}
             output.append(json.dumps(obj, indent=labels_indent))
+        elif output_format == 'frame':
+            raise NotImplementedError
         else:
             print('incorrect output_format')
             return ''
