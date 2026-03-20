@@ -17,7 +17,7 @@ pip install git+https://github.com/CrinitusFeles/PyDWARF
 ## Usage
 
 ``` bash
-usage: __main__.py [-h] [-l LABELS_INDENT] [-k OFFSET_INDET] [-d MAX_DEPTH] [-o CSV_OUTPUT_FILENAME] [-f OUTPUT_FORMAT] [-t TABLE_FORMAT] elf_filepath struct_name [struct_name ...]
+usage: python pydwarf [-h] [-l LABELS_INDENT] [-k OFFSET_INDET] [-d MAX_DEPTH] [-o CSV_OUTPUT_FILENAME] [-f OUTPUT_FORMAT] [-t TABLE_FORMAT] elf_filepath struct_name [struct_name ...]
 
 Calculate C struct offset recusively.
 
